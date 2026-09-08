@@ -241,6 +241,7 @@ class PlayKeychainDB: NSObject {
         let keychainDB = playCoverContainerBaseURL()
             .appendingPathComponent("PlayChain")
             .appendingPathComponent("\(bundleID).db")
+        guard canOpenKeyCoverDatabase(keychainDB) else { return nil }
 
         let alreadyCreated = FileManager.default.fileExists(atPath: keychainDB.path)
 
@@ -305,4 +306,11 @@ class PlayKeychainDB: NSObject {
             return nil
         }
     }
+}
+
+private func canOpenKeyCoverDatabase(_ databaseURL: URL) -> Bool {
+    let encryptedURL = databaseURL.deletingPathExtension().appendingPathExtension("keyCover")
+    guard FileManager.default.fileExists(atPath: encryptedURL.path) else { return true }
+    PlayKeychain.debugLogger("KeyCover database is locked; launch the app through PlayCover")
+    return false
 }
