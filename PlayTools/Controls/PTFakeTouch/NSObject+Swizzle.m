@@ -127,9 +127,6 @@ __attribute__((visibility("hidden")))
 
 
 - (long long) hook_orientation {
-    if ([[PlaySettings shared] followInGameOrientation]) {
-        return [[OrientationSession shared] deviceOrientationRawValue];
-    }
     return 0;
 }
 

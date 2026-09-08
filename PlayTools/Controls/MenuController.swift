@@ -61,7 +61,6 @@ extension UIApplication {
                 if let dict = sender.propertyList as? [String: Any],
                    let index = dict["rotationIndex"] as? Int {
                     rootViewController.rotateView(sender, deviceOrientation: index)
-                    OrientationSession.shared.applyManualRotation(index: index)
                 }
             }
         }
