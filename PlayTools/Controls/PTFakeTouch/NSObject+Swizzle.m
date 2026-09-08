@@ -127,6 +127,9 @@ __attribute__((visibility("hidden")))
 
 
 - (long long) hook_orientation {
+    if ([[PlaySettings shared] followInGameOrientation]) {
+        return [[OrientationSession shared] deviceOrientationRawValue];
+    }
     return 0;
 }
 
@@ -157,8 +160,8 @@ __attribute__((visibility("hidden")))
     return NO;
 }
 
-- (void) hook_setCurrentSubscription:(VSSubscription *)currentSubscription {
-    // do nothing
+- (void) hook_setCurrentSubscription:(id)currentSubscription {
+    // do nothing — VSSubscription is unavailable on Mac Catalyst SDKs
 }
 
 - (NSString *)hook_stringByReplacingOccurrencesOfRegularExpressionPattern:(NSString *)pattern
