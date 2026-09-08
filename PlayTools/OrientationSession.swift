@@ -5,6 +5,10 @@
 //  Tracks live interface orientation and (when enabled) resizes the Mac window
 //  so portrait/landscape switches behave like iPad Stage Manager.
 //
+//  Important: do NOT mutate screen bounds or the NSWindow on first observation.
+//  Games that need "Fix window display issues" already set up inverted bounds at
+//  load; touching them at launch causes a black screen (e.g. Gakuen Idolmaster).
+//
 
 import Foundation
 import UIKit
@@ -13,14 +17,19 @@ import UIKit
     @objc public static let shared = OrientationSession()
 
     private(set) var interfaceOrientation: UIInterfaceOrientation = .unknown
-    private var baseWidth: CGFloat = 0
-    private var baseHeight: CGFloat = 0
     private var lastPortraitLayout: Bool?
+    private var hasBaseline = false
+    private var hasAppliedFollowChange = false
     private var pendingResizeAfterFullscreen = false
     private var observersInstalled = false
 
     /// UIDeviceOrientation raw value for `hook_orientation` when follow mode is on.
+    /// Stays at unknown (0) until we have actually followed a portrait/landscape flip,
+    /// so Fix Window / inverse-screen setups keep working at launch.
     @objc public var deviceOrientationRawValue: Int {
+        guard hasAppliedFollowChange else {
+            return UIDeviceOrientation.unknown.rawValue
+        }
         switch interfaceOrientation {
         case .portrait:
             return UIDeviceOrientation.portrait.rawValue
@@ -39,14 +48,11 @@ import UIKit
     func initialize() {
         guard PlaySettings.shared.followInGameOrientation else { return }
 
-        baseWidth = mainScreenWidth
-        baseHeight = mainScreenHeight
-        lastPortraitLayout = baseHeight > baseWidth
-
         installObserversIfNeeded()
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
-            self?.syncFromWindowScene(resize: true)
+        // Baseline only — never resize or rewrite mainScreen dims here.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            self?.syncFromWindowScene(resize: false)
         }
     }
 
@@ -70,7 +76,7 @@ import UIKit
 
     /// Map a point already converted into UIKit view space through the current interface orientation.
     func transformViewPoint(_ point: CGPoint, viewSize: CGSize) -> CGPoint {
-        guard PlaySettings.shared.followInGameOrientation else { return point }
+        guard PlaySettings.shared.followInGameOrientation, hasAppliedFollowChange else { return point }
         switch interfaceOrientation {
         case .landscapeRight, .portraitUpsideDown:
             // 180° relative to landscapeLeft / portrait
@@ -97,7 +103,8 @@ import UIKit
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.syncFromWindowScene(resize: true)
+            // Activate is noisy at launch — baseline only.
+            self?.syncFromWindowScene(resize: false)
         }
 
         NotificationCenter.default.addObserver(
@@ -109,8 +116,8 @@ import UIKit
             self?.restorePendingResizeIfNeeded()
         }
 
-        // Poll lightly: some games change geometry without posting the status-bar notification.
-        Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+        // Poll for in-game orientation flips without stomping launch setup.
+        Timer.scheduledTimer(withTimeInterval: 0.75, repeats: true) { [weak self] _ in
             self?.syncFromWindowScene(resize: true)
             self?.restorePendingResizeIfNeeded()
         }
@@ -118,53 +125,58 @@ import UIKit
 
     private func apply(orientation: UIInterfaceOrientation, resize: Bool) {
         let nowPortrait = orientation.isPortraitLike
-        let orientationChanged = interfaceOrientation != orientation
-        let layoutChanged = lastPortraitLayout.map { $0 != nowPortrait } ?? true
 
-        interfaceOrientation = orientation
-
-        guard resize, layoutChanged || (orientationChanged && lastPortraitLayout == nil) else { return }
-
-        updateScreenDimensions(portrait: nowPortrait)
-
-        if PlayScreen.shared.fullscreen {
-            pendingResizeAfterFullscreen = true
+        if !hasBaseline {
+            interfaceOrientation = orientation
             lastPortraitLayout = nowPortrait
+            hasBaseline = true
             return
         }
 
-        resizeWindow(portrait: nowPortrait)
+        let layoutChanged = lastPortraitLayout.map { $0 != nowPortrait } ?? false
+        interfaceOrientation = orientation
+
+        guard resize, layoutChanged else {
+            return
+        }
+
+        // Portrait ↔ landscape crossed: swap current dims / window in place.
+        flipLayout()
+        hasAppliedFollowChange = true
         lastPortraitLayout = nowPortrait
+
+        if PlayScreen.shared.fullscreen {
+            pendingResizeAfterFullscreen = true
+            return
+        }
+
         pendingResizeAfterFullscreen = false
     }
 
-    private func updateScreenDimensions(portrait: Bool) {
-        let landscapeW = max(baseWidth, baseHeight)
-        let landscapeH = min(baseWidth, baseHeight)
-        if portrait {
-            mainScreenWidth = landscapeH
-            mainScreenHeight = landscapeW
-        } else {
-            mainScreenWidth = landscapeW
-            mainScreenHeight = landscapeH
-        }
+    private func flipLayout() {
+        swap(&mainScreenWidth, &mainScreenHeight)
         PlaySettings.shared.windowSizeWidth = mainScreenWidth
         PlaySettings.shared.windowSizeHeight = mainScreenHeight
-    }
 
-    private func resizeWindow(portrait: Bool) {
-        let landscapeW = max(baseWidth, baseHeight)
-        let landscapeH = min(baseWidth, baseHeight)
-        let target = portrait
-            ? CGSize(width: landscapeH, height: landscapeW)
-            : CGSize(width: landscapeW, height: landscapeH)
-        AKInterface.shared?.setWindowContentSize(target)
+        if PlayScreen.shared.fullscreen {
+            return
+        }
+
+        // Prefer swapping the live window content size so we stay consistent with
+        // whatever Catalyst / Fix Window already produced at launch.
+        let current = AKInterface.shared?.windowFrame.size
+            ?? CGSize(width: mainScreenWidth, height: mainScreenHeight)
+        AKInterface.shared?.setWindowContentSize(
+            CGSize(width: current.height, height: current.width)
+        )
     }
 
     private func restorePendingResizeIfNeeded() {
         guard pendingResizeAfterFullscreen, !PlayScreen.shared.fullscreen else { return }
-        guard let portrait = lastPortraitLayout else { return }
-        resizeWindow(portrait: portrait)
+        // Dims were already flipped while fullscreen; only sync the window now.
+        AKInterface.shared?.setWindowContentSize(
+            CGSize(width: mainScreenWidth, height: mainScreenHeight)
+        )
         pendingResizeAfterFullscreen = false
     }
 }
