@@ -10,6 +10,8 @@ public class PlayCover: NSObject {
 
     static let shared = PlayCover()
     var menuController: MenuController?
+    private var launchRotationObserver: NSObjectProtocol?
+    private var launchRotationScheduled = false
 
     @objc static public func launch() {
         quitWhenClose()
@@ -24,23 +26,31 @@ public class PlayCover: NSObject {
             FileManager.default.changeCurrentDirectoryPath("/")
         }
 
-        if PlaySettings.shared.displayRotation != 0 {
-            DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 0.5, execute: {
-                let rotateCommand = UIKeyCommand(
-                    title: "Keep Rotation Command",
-                    image: nil,
-                    action: #selector(UIApplication.rotateView(_:)),
-                    input: "",
-                    modifierFlags: [],
-                    propertyList: ["rotationIndex": PlaySettings.shared.displayRotation]
-                )
-                UIApplication.shared.sendAction(
-                    #selector(UIApplication.rotateView(_:)),
-                    to: UIApplication.shared,
-                    from: rotateCommand,
-                    for: nil
-                )
-            })
+        if PlaySettings.shared.effectiveDisplayRotation != 0 {
+            shared.launchRotationObserver = NotificationCenter.default.addObserver(
+                forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
+            ) { _ in
+                shared.scheduleLaunchRotation()
+            }
+        }
+    }
+
+    private func scheduleLaunchRotation() {
+        guard !launchRotationScheduled else { return }
+        launchRotationScheduled = true
+        if let observer = launchRotationObserver {
+            NotificationCenter.default.removeObserver(observer)
+            launchRotationObserver = nil
+        }
+        // Start the delay after activation, not in the dylib constructor: Unity
+        // can block the main thread during launch and overwrite an earlier rotation.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            let command = UIKeyCommand(
+                title: "Keep Rotation Command", image: nil,
+                action: #selector(UIApplication.rotateView(_:)), input: "", modifierFlags: [],
+                propertyList: ["rotationIndex": PlaySettings.shared.effectiveDisplayRotation]
+            )
+            UIApplication.shared.rotateView(command)
         }
     }
 

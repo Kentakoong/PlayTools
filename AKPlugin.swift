@@ -19,11 +19,7 @@ private struct AKAppSettingsData: Codable {
 }
 
 private func akCurrentUserHomeDirectoryPath() -> String {
-    let userName = NSUserName()
-    if let homeDirectory = NSHomeDirectoryForUser(userName) {
-        return homeDirectory
-    }
-    return NSString(string: "~\(userName)").expandingTildeInPath
+    playCoverHostHomeDirectoryPath()
 }
 
 private func akSettingsURLForBundleIdentifier(_ bundleIdentifier: String) -> URL {
