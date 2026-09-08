@@ -317,7 +317,14 @@ class AKPlugin: NSObject, Plugin {
             return
         }
         window.contentAspectRatio = size
+        window.contentMinSize = size
+        window.contentMaxSize = size
         window.setContentSize(size)
+        DispatchQueue.main.async { [weak window] in
+            window?.contentMinSize = .zero
+            window?.contentMaxSize = NSSize(width: CGFloat.greatestFiniteMagnitude,
+                                            height: CGFloat.greatestFiniteMagnitude)
+        }
     }
 
     /// Convenience instance property that exposes the cached static preference.
