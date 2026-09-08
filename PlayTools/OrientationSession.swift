@@ -76,11 +76,13 @@ import UIKit
 
     private func requestSceneResize() {
         guard let scene = PlayScreen.shared.windowScene,
-              let window = PlayScreen.shared.window,
+              let interface = AKInterface.shared,
               let restrictions = scene.sizeRestrictions
         else { return }
 
-        let currentSize = window.bounds.size
+        // UIWindow.bounds is hooked to expose the newly rotated virtual screen
+        // by this point. Read the native window frame so it is swapped once.
+        let currentSize = interface.windowFrame.size
         let targetSize = CGSize(width: currentSize.height, height: currentSize.width)
         restrictions.minimumSize = targetSize
         restrictions.maximumSize = targetSize
