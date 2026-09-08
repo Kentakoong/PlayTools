@@ -317,15 +317,7 @@ class AKPlugin: NSObject, Plugin {
             return
         }
         window.contentAspectRatio = size
-        let oldFrame = window.frame
-        var frame = window.frameRect(forContentRect: CGRect(origin: .zero, size: size))
-        frame.origin = CGPoint(x: oldFrame.midX - frame.width / 2,
-                               y: oldFrame.midY - frame.height / 2)
-        if let visibleFrame = window.screen?.visibleFrame {
-            frame.origin.x = min(max(frame.origin.x, visibleFrame.minX), visibleFrame.maxX - frame.width)
-            frame.origin.y = min(max(frame.origin.y, visibleFrame.minY), visibleFrame.maxY - frame.height)
-        }
-        window.setFrame(frame, display: true, animate: false)
+        window.setContentSize(size)
     }
 
     /// Convenience instance property that exposes the cached static preference.
