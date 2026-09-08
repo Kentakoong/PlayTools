@@ -92,6 +92,13 @@ import UIKit
             scene?.sizeRestrictions?.maximumSize = CGSize(width: CGFloat.greatestFiniteMagnitude,
                                                            height: CGFloat.greatestFiniteMagnitude)
         }
+
+        // Unmodified iOS-on-Mac apps can ignore sizeRestrictions. Wait until
+        // UIKit's orientation/layout transaction is complete before asking
+        // AppKit to update only the content size.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) {
+            AKInterface.shared?.setWindowContentSize(targetSize)
+        }
     }
 
     private func observeGameOrientation() {

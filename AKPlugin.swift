@@ -312,6 +312,7 @@ class AKPlugin: NSObject, Plugin {
             return
         }
         window.contentAspectRatio = size
+        window.setContentSize(size)
     }
 
     /// Convenience instance property that exposes the cached static preference.
