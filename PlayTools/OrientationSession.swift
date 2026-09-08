@@ -71,19 +71,21 @@ import UIKit
         hasAppliedTransition = true
 
         guard !PlayScreen.shared.fullscreen else { return }
-        requestSceneResize()
+        requestSceneResize(portrait: nextPortrait)
     }
 
-    private func requestSceneResize() {
+    private func requestSceneResize(portrait: Bool) {
         guard let scene = PlayScreen.shared.windowScene,
               let interface = AKInterface.shared,
               let restrictions = scene.sizeRestrictions
         else { return }
 
-        // UIWindow.bounds is hooked to expose the newly rotated virtual screen
-        // by this point. Read the native window frame so it is swapped once.
         let currentSize = interface.windowFrame.size
-        let targetSize = CGSize(width: currentSize.height, height: currentSize.width)
+        let shortSide = min(currentSize.width, currentSize.height)
+        let longSide = max(currentSize.width, currentSize.height)
+        let targetSize = portrait
+            ? CGSize(width: shortSide, height: longSide)
+            : CGSize(width: longSide, height: shortSide)
         restrictions.minimumSize = targetSize
         restrictions.maximumSize = targetSize
 
