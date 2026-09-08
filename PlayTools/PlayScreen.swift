@@ -164,11 +164,13 @@ public class PlayScreen: NSObject {
     }
 
     var window: UIWindow? {
-        return UIApplication.shared.connectedScenes
+        let windows = UIApplication.shared.connectedScenes
             .filter({$0.activationState == .foregroundActive})
             .compactMap({$0 as? UIWindowScene})
-            .first?.windows
-            .filter({$0.isKeyWindow}).first
+            .flatMap(\.windows)
+        return windows.first(where: \.isKeyWindow)
+            ?? windows.first(where: { !$0.isHidden && $0.alpha > 0 && $0.windowLevel == .normal })
+            ?? windows.first
     }
 
     var nsWindow: NSObject? {

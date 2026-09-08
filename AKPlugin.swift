@@ -311,28 +311,7 @@ class AKPlugin: NSObject, Plugin {
         if window.styleMask.contains(.fullScreen) {
             return
         }
-        resizeWindow(window, to: size)
-
-        // UIKit may publish its new scene geometry just after the orientation
-        // callback and restore the previous AppKit frame. Reapply after that
-        // handoff so the native window and the UIKit scene finish in sync.
-        for delay in [0.1, 0.35] {
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak window] in
-                guard let window, !window.styleMask.contains(.fullScreen) else { return }
-                self.resizeWindow(window, to: size)
-            }
-        }
-    }
-
-    private func resizeWindow(_ window: NSWindow, to size: CGSize) {
-        let oldFrame = window.frame
         window.contentAspectRatio = size
-        window.setContentSize(size)
-
-        var centeredFrame = window.frame
-        centeredFrame.origin.x = oldFrame.midX - centeredFrame.width / 2
-        centeredFrame.origin.y = oldFrame.midY - centeredFrame.height / 2
-        window.setFrame(centeredFrame, display: true, animate: false)
     }
 
     /// Convenience instance property that exposes the cached static preference.
