@@ -36,8 +36,6 @@ func playCoverContainerBaseURL() -> URL {
             settingsData = AppSettingsData()
             print("[PlayTools] PlaySettings decode failed.\n%@")
         }
-        _windowSizeWidth = Double(settingsData.windowWidth)
-        _windowSizeHeight = Double(settingsData.windowHeight)
     }
 
     lazy var discordActivity = settingsData.discordActivity
@@ -50,18 +48,10 @@ func playCoverContainerBaseURL() -> URL {
 
     @objc lazy var bypass = settingsData.bypass
 
-    @objc var windowSizeHeight: CGFloat {
-        get { CGFloat(_windowSizeHeight) }
-        set { _windowSizeHeight = Double(newValue) }
-    }
+    // Keep as lazy @objc vars so KVC setValue:from App Default / Fix Window swizzles works.
+    @objc lazy var windowSizeHeight = CGFloat(settingsData.windowHeight)
 
-    @objc var windowSizeWidth: CGFloat {
-        get { CGFloat(_windowSizeWidth) }
-        set { _windowSizeWidth = Double(newValue) }
-    }
-
-    private var _windowSizeHeight: Double = 0
-    private var _windowSizeWidth: Double = 0
+    @objc lazy var windowSizeWidth = CGFloat(settingsData.windowWidth)
 
     @objc lazy var inverseScreenValues = settingsData.inverseScreenValues
 
