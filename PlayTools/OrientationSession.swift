@@ -38,6 +38,7 @@ import UIKit
     func initialize() {
         interfaceOrientation = orientation(for: PlaySettings.shared.effectiveDisplayRotation)
         portraitLayout = interfaceOrientation.isPortraitLike
+        updateVirtualScreenSize(portrait: portraitLayout)
         orientationTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
             self?.observeGameOrientation()
         }
@@ -64,14 +65,21 @@ import UIKit
         interfaceOrientation = orientation
         guard nextPortrait != portraitLayout else { return }
 
-        swap(&mainScreenWidth, &mainScreenHeight)
-        PlaySettings.shared.windowSizeWidth = mainScreenWidth
-        PlaySettings.shared.windowSizeHeight = mainScreenHeight
+        updateVirtualScreenSize(portrait: nextPortrait)
         portraitLayout = nextPortrait
         hasAppliedTransition = true
 
         guard !PlayScreen.shared.fullscreen else { return }
         requestSceneResize(portrait: nextPortrait)
+    }
+
+    private func updateVirtualScreenSize(portrait: Bool) {
+        let shortSide = min(mainScreenWidth, mainScreenHeight)
+        let longSide = max(mainScreenWidth, mainScreenHeight)
+        mainScreenWidth = portrait ? shortSide : longSide
+        mainScreenHeight = portrait ? longSide : shortSide
+        PlaySettings.shared.windowSizeWidth = mainScreenWidth
+        PlaySettings.shared.windowSizeHeight = mainScreenHeight
     }
 
     private func requestSceneResize(portrait: Bool) {
