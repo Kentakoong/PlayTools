@@ -76,30 +76,22 @@ import UIKit
 
     private func requestSceneResize() {
         guard let scene = PlayScreen.shared.windowScene,
-              let interface = AKInterface.shared,
-              let preferencesClass = NSClassFromString("UIWindowSceneGeometryPreferencesMac") as? NSObject.Type
+              let window = PlayScreen.shared.window,
+              let restrictions = scene.sizeRestrictions
         else { return }
 
-        let currentFrame = interface.windowFrame
-        let mainFrame = interface.mainScreenFrame
-        let currentSystemFrame = CGRect(
-            x: currentFrame.minX,
-            y: mainFrame.maxY - currentFrame.maxY,
-            width: currentFrame.width,
-            height: currentFrame.height
-        )
-        let targetFrame = CGRect(
-            x: currentSystemFrame.midX - currentSystemFrame.height / 2,
-            y: currentSystemFrame.midY - currentSystemFrame.width / 2,
-            width: currentSystemFrame.height,
-            height: currentSystemFrame.width
-        )
+        let currentSize = window.bounds.size
+        let targetSize = CGSize(width: currentSize.height, height: currentSize.width)
+        restrictions.minimumSize = targetSize
+        restrictions.maximumSize = targetSize
 
-        let preferences = preferencesClass.init()
-        preferences.setValue(NSValue(cgRect: targetFrame), forKey: "systemFrame")
-        let selector = NSSelectorFromString("requestGeometryUpdateWithPreferences:errorHandler:")
-        guard scene.responds(to: selector) else { return }
-        _ = scene.perform(selector, with: preferences, with: nil)
+        // Let UIKit apply the constrained scene geometry before returning the
+        // window to its normal user-resizable range.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak scene] in
+            scene?.sizeRestrictions?.minimumSize = CGSize(width: 0, height: 0)
+            scene?.sizeRestrictions?.maximumSize = CGSize(width: CGFloat.greatestFiniteMagnitude,
+                                                           height: CGFloat.greatestFiniteMagnitude)
+        }
     }
 
     private func observeGameOrientation() {
