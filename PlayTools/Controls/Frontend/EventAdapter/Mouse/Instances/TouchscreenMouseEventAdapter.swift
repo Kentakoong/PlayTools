@@ -46,7 +46,7 @@ public class TouchscreenMouseEventAdapter: MouseEventAdapter {
         // Horizontally in center
         point.x -= (rect.width - viewRect.width / rate)/2
         point.x *= rate
-        return point
+        return OrientationSession.shared.transformViewPoint(point, viewSize: viewRect.size)
     }
 
     public func handleScrollWheel(deltaX: CGFloat, deltaY: CGFloat) -> Bool {

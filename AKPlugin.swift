@@ -304,6 +304,27 @@ class AKPlugin: NSObject, Plugin {
         NSMenu.setMenuBarVisible(visible)
     }
 
+    func setWindowContentSize(_ size: CGSize) {
+        guard let window = NSApplication.shared.windows.first else { return }
+        if window.styleMask.contains(.fullScreen) {
+            return
+        }
+        let contentRect = window.contentRect(forFrameRect: window.frame)
+        guard abs(contentRect.width - size.width) > 0.5 || abs(contentRect.height - size.height) > 0.5 else {
+            return
+        }
+        let dx = (contentRect.width - size.width) / 2
+        let dy = (contentRect.height - size.height) / 2
+        let newContent = NSRect(
+            x: contentRect.origin.x + dx,
+            y: contentRect.origin.y + dy,
+            width: size.width,
+            height: size.height
+        )
+        let newFrame = window.frameRect(forContentRect: newContent)
+        window.setFrame(newFrame, display: true, animate: false)
+    }
+
     /// Convenience instance property that exposes the cached static preference.
     private var hideTitleBarSetting: Bool { Self.akAppSettingsData?.hideTitleBar ?? false }
     private var floatingWindowSetting: Bool { Self.akAppSettingsData?.floatingWindow ?? false }
