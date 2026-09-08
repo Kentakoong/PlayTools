@@ -31,11 +31,16 @@ private func akSettingsURLForBundleIdentifier(_ bundleIdentifier: String) -> URL
         .appendingPathComponent("\(bundleIdentifier).plist")
 }
 
+// swiftlint:disable:next type_body_length
 class AKPlugin: NSObject, Plugin {
     private var applicationWindow: NSWindow? {
-        NSApplication.shared.keyWindow
-            ?? NSApplication.shared.mainWindow
-            ?? NSApplication.shared.windows.first { $0.isVisible && $0.level == .normal }
+        NSApplication.shared.windows
+            .filter { $0.isVisible && $0.level == .normal && !$0.isKind(of: NSPanel.self) }
+            .max { lhs, rhs in
+                let lhsSize = lhs.contentView?.bounds.size ?? lhs.frame.size
+                let rhsSize = rhs.contentView?.bounds.size ?? rhs.frame.size
+                return lhsSize.width * lhsSize.height < rhsSize.width * rhsSize.height
+            }
     }
 
     required override init() {
