@@ -2,9 +2,9 @@
 //  OrientationSession.swift
 //  PlayTools
 //
-//  Temporarily inert while we bisect the Fix Window black-screen regression.
-//  Stock graphics path is restored; follow/resize logic will return once
-//  App Default + Fix Window renders again on Gakuen Idolmaster.
+//  Keeps the screen geometry exposed to iOS apps in sync with real UIKit
+//  portrait/landscape transitions. Catalyst scene orientation is deliberately
+//  not polled because it can report landscape while a portrait app launches.
 //
 
 import Foundation
@@ -13,20 +13,107 @@ import UIKit
 @objc public final class OrientationSession: NSObject {
     @objc public static let shared = OrientationSession()
 
-    private(set) var interfaceOrientation: UIInterfaceOrientation = .landscapeLeft
+    private(set) var interfaceOrientation: UIInterfaceOrientation = .unknown
+    private var portraitLayout = false
+    private var hasAppliedTransition = false
+    private var orientationTimer: Timer?
+    private var candidatePortraitLayout: Bool?
+    private var candidateObservationCount = 0
 
     @objc public var deviceOrientationRawValue: Int {
-        UIDeviceOrientation.unknown.rawValue
+        guard hasAppliedTransition else { return UIDeviceOrientation.unknown.rawValue }
+        switch interfaceOrientation {
+        case .portrait:
+            return UIDeviceOrientation.portrait.rawValue
+        case .portraitUpsideDown:
+            return UIDeviceOrientation.portraitUpsideDown.rawValue
+        case .landscapeLeft:
+            return UIDeviceOrientation.landscapeRight.rawValue
+        case .landscapeRight:
+            return UIDeviceOrientation.landscapeLeft.rawValue
+        default:
+            return UIDeviceOrientation.unknown.rawValue
+        }
     }
 
-    func initialize() {}
+    func initialize() {
+        interfaceOrientation = orientation(for: PlaySettings.shared.effectiveDisplayRotation)
+        portraitLayout = interfaceOrientation.isPortraitLike
+        orientationTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
+            self?.observeGameOrientation()
+        }
+    }
 
     func applyManualRotation(index: Int) {
-        _ = index
+        candidatePortraitLayout = nil
+        candidateObservationCount = 0
+        apply(orientation: orientation(for: index))
     }
 
     func transformViewPoint(_ point: CGPoint, viewSize: CGSize) -> CGPoint {
-        _ = viewSize
-        return point
+        guard hasAppliedTransition else { return point }
+        switch interfaceOrientation {
+        case .landscapeRight, .portraitUpsideDown:
+            return CGPoint(x: viewSize.width - point.x, y: viewSize.height - point.y)
+        default:
+            return point
+        }
+    }
+
+    private func apply(orientation: UIInterfaceOrientation) {
+        let nextPortrait = orientation.isPortraitLike
+        interfaceOrientation = orientation
+        guard nextPortrait != portraitLayout else { return }
+
+        swap(&mainScreenWidth, &mainScreenHeight)
+        PlaySettings.shared.windowSizeWidth = mainScreenWidth
+        PlaySettings.shared.windowSizeHeight = mainScreenHeight
+        portraitLayout = nextPortrait
+        hasAppliedTransition = true
+
+        guard !PlayScreen.shared.fullscreen else { return }
+        if let currentSize = AKInterface.shared?.windowFrame.size {
+            AKInterface.shared?.setWindowContentSize(
+                CGSize(width: currentSize.height, height: currentSize.width)
+            )
+        }
+    }
+
+    private func observeGameOrientation() {
+        guard let viewController = PlayScreen.shared.window?.rootViewController else { return }
+        let mask = viewController.supportedInterfaceOrientations
+        let supportsPortrait = mask.contains(.portrait) || mask.contains(.portraitUpsideDown)
+        let supportsLandscape = mask.contains(.landscapeLeft) || mask.contains(.landscapeRight)
+        guard supportsPortrait != supportsLandscape else {
+            candidatePortraitLayout = nil
+            candidateObservationCount = 0
+            return
+        }
+
+        if candidatePortraitLayout == supportsPortrait {
+            candidateObservationCount += 1
+        } else {
+            candidatePortraitLayout = supportsPortrait
+            candidateObservationCount = 1
+        }
+        guard candidateObservationCount >= 2, supportsPortrait != portraitLayout else { return }
+
+        candidateObservationCount = 0
+        NSLog("[PlayTools] Game requested %@ layout", supportsPortrait ? "portrait" : "landscape")
+        apply(orientation: supportsPortrait ? .portrait : .landscapeLeft)
+    }
+
+    private func orientation(for index: Int) -> UIInterfaceOrientation {
+        let orientations: [UIInterfaceOrientation] = [
+            .landscapeLeft, .portrait, .landscapeRight, .portraitUpsideDown
+        ]
+        let normalizedIndex = ((index % orientations.count) + orientations.count) % orientations.count
+        return orientations[normalizedIndex]
+    }
+}
+
+private extension UIInterfaceOrientation {
+    var isPortraitLike: Bool {
+        self == .portrait || self == .portraitUpsideDown
     }
 }

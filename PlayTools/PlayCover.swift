@@ -18,6 +18,7 @@ public class PlayCover: NSObject {
         AKInterface.initialize()
         UserPluginLoader.initialize()
         PlayScreen.shared.initialize()
+        OrientationSession.shared.initialize()
         PlayInput.shared.initialize()
         DiscordIPC.shared.initialize()
 

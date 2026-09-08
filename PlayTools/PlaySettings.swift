@@ -112,7 +112,8 @@ func playCoverContainerBaseURL() -> URL {
         return playCoverPreferredDisplayRotation(infoDictionary: Bundle.main.infoDictionary ?? [:])
     }()
 
-    @objc lazy var followInGameOrientation = settingsData.followInGameOrientation ?? false
+    // Real UIKit orientation changes should work without per-game setup.
+    @objc lazy var followInGameOrientation = true
 
     @objc lazy var checkMicPermissionSync = settingsData.checkMicPermissionSync
 
