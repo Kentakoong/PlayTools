@@ -9,6 +9,7 @@ import Foundation
 import Security
 import SQLite3
 
+// swiftlint:disable:next type_body_length
 class PlayKeychainDB: NSObject {
     public static let shared = PlayKeychainDB()
 
@@ -21,14 +22,20 @@ class PlayKeychainDB: NSObject {
             return nil
         }
 
-        let selectWhere = primaryColumns.compactMap({
-            guard let attr = attributes[$0] else { return nil } // use only requested ones
+        // Access groups contain a signing-team prefix on Apple platforms. A
+        // PlayCover app can be resigned by a different developer team between
+        // launches, and older PlayChain rows stored this column as NULL. Do not
+        // make that unstable prefix part of the emulated keychain identity.
+        let stablePrimaryColumns = primaryColumns.filter { $0 != kSecAttrAccessGroup }
+        let selectClauses: [String] = stablePrimaryColumns.compactMap({ column -> String? in
+            guard let attr = attributes[column] else { return nil } // use only requested ones
             if CFGetTypeID(attr as CFTypeRef) == CFDataGetTypeID(),
                let string = (attr as? Data).map({ String(data: $0, encoding: .utf8) }) {
-                return "\($0) LIKE '\(string!)'" // non null-termination in db
+                return "\(column) LIKE '\(string!)'" // non null-termination in db
             }
-            return "\($0) = '\(attr)'"
-        }).joined(separator: " AND ")
+            return "\(column) = '\(attr)'"
+        })
+        let selectWhere = selectClauses.joined(separator: " AND ")
         guard selectWhere.count > 0 else { return nil }
         let selectLimit = attributes[kSecMatchLimit] as? String == kSecMatchLimitOne as String ? 1 : Int.max
 
@@ -76,15 +83,20 @@ class PlayKeychainDB: NSObject {
             return nil
         }
 
+        let normalizedAttributes = attributes.mutableCopy() as? NSMutableDictionary ?? NSMutableDictionary()
+        if normalizedAttributes[kSecAttrAccessGroup] == nil {
+            normalizedAttributes[kSecAttrAccessGroup] = ""
+        }
+
         var columnsQuery = primaryColumns.map({ "\($0)" })
         columnsQuery.append(contentsOf: secondaryColumns.compactMap({
-            attributes[$0] != nil ? "\($0)" : nil
+            normalizedAttributes[$0] != nil ? "\($0)" : nil
         }))
         columnsQuery.append(contentsOf: PlayedAppleDBConstants.values.compactMap({
-            attributes[$0] != nil ? "\($0)" : nil
+            normalizedAttributes[$0] != nil ? "\($0)" : nil
         }))
 
-        let insertValues = columnsQuery.map({ attributes[$0] as CFTypeRef })
+        let insertValues = columnsQuery.map({ normalizedAttributes[$0] as CFTypeRef })
 
         let insertColumns = columnsQuery.joined(separator: ", ")
         let insertPlaceholders = Array(repeating: "?", count: insertValues.count).joined(separator: ", ")
@@ -95,7 +107,7 @@ class PlayKeychainDB: NSObject {
         let newDict: NSMutableDictionary = [:]
         newDict[kSecClassKey] = tableName
         for column in columnsQuery {
-            newDict[column] = attributes[column]
+            newDict[column] = normalizedAttributes[column]
         }
 
         guard usingDB({ sqlite3DB in
@@ -180,7 +192,8 @@ class PlayKeychainDB: NSObject {
             return false
         }
 
-        let deleteWhere = primaryColumns.compactMap({
+        let stablePrimaryColumns = primaryColumns.filter { $0 != kSecAttrAccessGroup }
+        let deleteWhere = stablePrimaryColumns.compactMap({
             guard let attr = attributes[$0] else { return nil } // use only requested ones
             if CFGetTypeID(attr as CFTypeRef) == CFDataGetTypeID(),
                let string = (attr as? Data).map({ return String(data: $0, encoding: .utf8) }) {
@@ -202,7 +215,7 @@ class PlayKeychainDB: NSObject {
                 return false
             }
 
-            return sqlite3_step(stmt) == SQLITE_OK
+            return sqlite3_step(stmt) == SQLITE_DONE
         }) else { return false }
 
         return true
