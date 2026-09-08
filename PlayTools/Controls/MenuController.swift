@@ -57,7 +57,9 @@ extension UIApplication {
         for scene in connectedScenes {
             guard let windowScene = scene as? UIWindowScene else { continue }
             for window in windowScene.windows {
-                guard let rootViewController = window.rootViewController else { continue }
+                // Keyboard/effects windows cannot present rotation controllers.
+                guard window.windowLevel == .normal, !window.isHidden,
+                      let rootViewController = window.rootViewController else { continue }
                 if let dict = sender.propertyList as? [String: Any],
                    let index = dict["rotationIndex"] as? Int {
                     rootViewController.rotateView(sender, deviceOrientation: index)
@@ -120,11 +122,13 @@ extension UIViewController {
     func rotateView(_ sender: AnyObject, deviceOrientation: Int) {
         RotateViewController.rotate(deviceOrientation: deviceOrientation)
         RotateViewController.orientationTraverser %= RotateViewController.orientationList.count
+        guard presentedViewController == nil, !isBeingPresented, !isBeingDismissed else { return }
         let viewController = RotateViewController(nibName: nil, bundle: nil)
-        self.present(viewController, animated: true)
-        DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 1, execute: {
-            self.dismiss(animated: true)
-        })
+        // Launch-time rendering can delay the presentation. A timer can dismiss
+        // too early and leave the empty full-screen controller covering the game.
+        present(viewController, animated: true) {
+            viewController.dismiss(animated: true)
+        }
     }
 }
 

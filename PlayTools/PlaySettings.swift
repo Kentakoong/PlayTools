@@ -4,11 +4,7 @@ import UIKit
 let settings = PlaySettings.shared
 
 func playCoverUserHomeDirectoryPath() -> String {
-    let userName = NSUserName()
-    if let homeDirectory = NSHomeDirectoryForUser(userName) {
-        return homeDirectory
-    }
-    return NSString(string: "~\(userName)").expandingTildeInPath
+    playCoverHostHomeDirectoryPath()
 }
 
 func playCoverContainerBaseURL() -> URL {
@@ -32,9 +28,14 @@ func playCoverContainerBaseURL() -> URL {
         do {
             let data = try Data(contentsOf: settingsUrl)
             settingsData = try PropertyListDecoder().decode(AppSettingsData.self, from: data)
+            if playCoverNeedsLaunchCompatibilityMigration(version: settingsData.version) {
+                if settingsData.displayRotation == 0 { settingsData.displayRotation = -1 }
+                settingsData.playChain = true
+                settingsData.version = "3.1.0"
+            }
         } catch {
             settingsData = AppSettingsData()
-            print("[PlayTools] PlaySettings decode failed.\n%@")
+            NSLog("[PlayTools] Could not load settings at %@: %@", settingsUrl.path, error.localizedDescription)
         }
     }
 
@@ -106,6 +107,11 @@ func playCoverContainerBaseURL() -> URL {
 
     @objc lazy var displayRotation = settingsData.displayRotation
 
+    @objc lazy var effectiveDisplayRotation: Int = {
+        guard settingsData.displayRotation < 0 else { return settingsData.displayRotation }
+        return playCoverPreferredDisplayRotation(infoDictionary: Bundle.main.infoDictionary ?? [:])
+    }()
+
     @objc lazy var followInGameOrientation = settingsData.followInGameOrientation ?? false
 
     @objc lazy var checkMicPermissionSync = settingsData.checkMicPermissionSync
@@ -130,13 +136,13 @@ struct AppSettingsData: Codable {
     var customScaler = 2.0
     var resolution = 2
     var aspectRatio = 1
-    var displayRotation = 0
+    var displayRotation = -1
     var followInGameOrientation: Bool? = nil
     var notch = false
     var bypass = false
     var discordActivity = DiscordActivity()
-    var version = "2.0.0"
-    var playChain = false
+    var version = "3.1.0"
+    var playChain = true
     var playChainDebugging = false
     var inverseScreenValues = false
     var windowFixMethod = 0
