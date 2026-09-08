@@ -32,7 +32,11 @@ class PlayKeychainDB: NSObject {
         guard selectWhere.count > 0 else { return nil }
         let selectLimit = attributes[kSecMatchLimit] as? String == kSecMatchLimitOne as String ? 1 : Int.max
 
-        let selectQuery = "SELECT * FROM \(tableName) WHERE \(selectWhere) LIMIT \(selectLimit)"
+        // Older PlayChain databases may contain duplicate logical items when an
+        // omitted access group was stored as NULL. SQLite permits NULL values in
+        // composite primary keys, so select the most recently written item just
+        // like Keychain updates would expose the latest credential.
+        let selectQuery = "SELECT * FROM \(tableName) WHERE \(selectWhere) ORDER BY rowid DESC LIMIT \(selectLimit)"
         var stmt: OpaquePointer?
 
         var dictArr: [NSMutableDictionary] = []
