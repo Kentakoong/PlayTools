@@ -71,11 +71,35 @@ import UIKit
         hasAppliedTransition = true
 
         guard !PlayScreen.shared.fullscreen else { return }
-        if let currentSize = AKInterface.shared?.windowFrame.size {
-            AKInterface.shared?.setWindowContentSize(
-                CGSize(width: currentSize.height, height: currentSize.width)
-            )
-        }
+        requestSceneResize()
+    }
+
+    private func requestSceneResize() {
+        guard let scene = PlayScreen.shared.windowScene,
+              let interface = AKInterface.shared,
+              let preferencesClass = NSClassFromString("UIWindowSceneGeometryPreferencesMac") as? NSObject.Type
+        else { return }
+
+        let currentFrame = interface.windowFrame
+        let mainFrame = interface.mainScreenFrame
+        let currentSystemFrame = CGRect(
+            x: currentFrame.minX,
+            y: mainFrame.maxY - currentFrame.maxY,
+            width: currentFrame.width,
+            height: currentFrame.height
+        )
+        let targetFrame = CGRect(
+            x: currentSystemFrame.midX - currentSystemFrame.height / 2,
+            y: currentSystemFrame.midY - currentSystemFrame.width / 2,
+            width: currentSystemFrame.height,
+            height: currentSystemFrame.width
+        )
+
+        let preferences = preferencesClass.init()
+        preferences.setValue(NSValue(cgRect: targetFrame), forKey: "systemFrame")
+        let selector = NSSelectorFromString("requestGeometryUpdateWithPreferences:errorHandler:")
+        guard scene.responds(to: selector) else { return }
+        _ = scene.perform(selector, with: preferences, with: nil)
     }
 
     private func observeGameOrientation() {
