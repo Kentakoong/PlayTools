@@ -311,23 +311,28 @@ class AKPlugin: NSObject, Plugin {
         if window.styleMask.contains(.fullScreen) {
             return
         }
-        // AppKit otherwise keeps enforcing the launch-time portrait/landscape
-        // ratio and shrinks a requested rotation back into the old shape.
-        window.contentAspectRatio = size
-        let contentRect = window.contentRect(forFrameRect: window.frame)
-        guard abs(contentRect.width - size.width) > 0.5 || abs(contentRect.height - size.height) > 0.5 else {
-            return
+        resizeWindow(window, to: size)
+
+        // UIKit may publish its new scene geometry just after the orientation
+        // callback and restore the previous AppKit frame. Reapply after that
+        // handoff so the native window and the UIKit scene finish in sync.
+        for delay in [0.1, 0.35] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak window] in
+                guard let window, !window.styleMask.contains(.fullScreen) else { return }
+                self.resizeWindow(window, to: size)
+            }
         }
-        let dx = (contentRect.width - size.width) / 2
-        let dy = (contentRect.height - size.height) / 2
-        let newContent = NSRect(
-            x: contentRect.origin.x + dx,
-            y: contentRect.origin.y + dy,
-            width: size.width,
-            height: size.height
-        )
-        let newFrame = window.frameRect(forContentRect: newContent)
-        window.setFrame(newFrame, display: true, animate: false)
+    }
+
+    private func resizeWindow(_ window: NSWindow, to size: CGSize) {
+        let oldFrame = window.frame
+        window.contentAspectRatio = size
+        window.setContentSize(size)
+
+        var centeredFrame = window.frame
+        centeredFrame.origin.x = oldFrame.midX - centeredFrame.width / 2
+        centeredFrame.origin.y = oldFrame.midY - centeredFrame.height / 2
+        window.setFrame(centeredFrame, display: true, animate: false)
     }
 
     /// Convenience instance property that exposes the cached static preference.
