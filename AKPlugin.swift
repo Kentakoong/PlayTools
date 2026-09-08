@@ -32,6 +32,12 @@ private func akSettingsURLForBundleIdentifier(_ bundleIdentifier: String) -> URL
 }
 
 class AKPlugin: NSObject, Plugin {
+    private var applicationWindow: NSWindow? {
+        NSApplication.shared.keyWindow
+            ?? NSApplication.shared.mainWindow
+            ?? NSApplication.shared.windows.first { $0.isVisible && $0.level == .normal }
+    }
+
     required override init() {
         super.init()
         if let window = NSApplication.shared.windows.first {
@@ -94,7 +100,7 @@ class AKPlugin: NSObject, Plugin {
     }
 
     var windowFrame: CGRect {
-        NSApplication.shared.windows.first?.frame ?? CGRect()
+        applicationWindow?.frame ?? CGRect()
     }
 
     var isMainScreenEqualToFirst: Bool {
@@ -301,10 +307,13 @@ class AKPlugin: NSObject, Plugin {
     }
 
     func setWindowContentSize(_ size: CGSize) {
-        guard let window = NSApplication.shared.windows.first else { return }
+        guard let window = applicationWindow else { return }
         if window.styleMask.contains(.fullScreen) {
             return
         }
+        // AppKit otherwise keeps enforcing the launch-time portrait/landscape
+        // ratio and shrinks a requested rotation back into the old shape.
+        window.contentAspectRatio = size
         let contentRect = window.contentRect(forFrameRect: window.frame)
         guard abs(contentRect.width - size.width) > 0.5 || abs(contentRect.height - size.height) > 0.5 else {
             return

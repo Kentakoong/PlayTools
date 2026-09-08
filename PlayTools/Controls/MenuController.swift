@@ -122,6 +122,7 @@ extension UIViewController {
     func rotateView(_ sender: AnyObject, deviceOrientation: Int) {
         RotateViewController.rotate(deviceOrientation: deviceOrientation)
         RotateViewController.orientationTraverser %= RotateViewController.orientationList.count
+        OrientationSession.shared.applyManualRotation(index: deviceOrientation)
         guard presentedViewController == nil, !isBeingPresented, !isBeingDismissed else { return }
         let viewController = RotateViewController(nibName: nil, bundle: nil)
         // Launch-time rendering can delay the presentation. A timer can dismiss
