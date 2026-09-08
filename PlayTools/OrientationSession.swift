@@ -3,8 +3,7 @@
 //  PlayTools
 //
 //  Keeps the screen geometry exposed to iOS apps in sync with real UIKit
-//  portrait/landscape transitions. Catalyst scene orientation is deliberately
-//  not polled because it can report landscape while a portrait app launches.
+//  portrait/landscape transitions.
 //
 
 import Foundation
@@ -80,27 +79,36 @@ import UIKit
     }
 
     private func observeGameOrientation() {
-        guard let viewController = PlayScreen.shared.window?.rootViewController else { return }
-        let mask = viewController.supportedInterfaceOrientations
+        guard let window = PlayScreen.shared.window else { return }
+        let sceneOrientation = window.windowScene?.interfaceOrientation
+        let mask = window.rootViewController?.supportedInterfaceOrientations ?? []
         let supportsPortrait = mask.contains(.portrait) || mask.contains(.portraitUpsideDown)
         let supportsLandscape = mask.contains(.landscapeLeft) || mask.contains(.landscapeRight)
-        guard supportsPortrait != supportsLandscape else {
+        let requestedPortraitLayout: Bool?
+        if let sceneOrientation, sceneOrientation.isPortraitLike || sceneOrientation.isLandscape {
+            requestedPortraitLayout = sceneOrientation.isPortraitLike
+        } else if supportsPortrait != supportsLandscape {
+            requestedPortraitLayout = supportsPortrait
+        } else {
+            requestedPortraitLayout = nil
+        }
+        guard let requestedPortraitLayout else {
             candidatePortraitLayout = nil
             candidateObservationCount = 0
             return
         }
 
-        if candidatePortraitLayout == supportsPortrait {
+        if candidatePortraitLayout == requestedPortraitLayout {
             candidateObservationCount += 1
         } else {
-            candidatePortraitLayout = supportsPortrait
+            candidatePortraitLayout = requestedPortraitLayout
             candidateObservationCount = 1
         }
-        guard candidateObservationCount >= 2, supportsPortrait != portraitLayout else { return }
+        guard candidateObservationCount >= 2, requestedPortraitLayout != portraitLayout else { return }
 
         candidateObservationCount = 0
-        NSLog("[PlayTools] Game requested %@ layout", supportsPortrait ? "portrait" : "landscape")
-        apply(orientation: supportsPortrait ? .portrait : .landscapeLeft)
+        NSLog("[PlayTools] Game requested %@ layout", requestedPortraitLayout ? "portrait" : "landscape")
+        apply(orientation: requestedPortraitLayout ? .portrait : .landscapeLeft)
     }
 
     private func orientation(for index: Int) -> UIInterfaceOrientation {
