@@ -312,7 +312,9 @@ class AKPlugin: NSObject, Plugin {
             return
         }
         window.contentAspectRatio = size
-        window.setContentSize(size)
+        var frame = window.frameRect(forContentRect: CGRect(origin: .zero, size: size))
+        frame.origin = window.frame.origin
+        window.setFrame(frame, display: true, animate: false)
     }
 
     /// Convenience instance property that exposes the cached static preference.
