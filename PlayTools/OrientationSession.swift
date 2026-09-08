@@ -104,9 +104,9 @@ import UIKit
     }
 
     private func flipLayout() {
+        // Only mutate runtime globals + the Mac window. Do not rewrite PlaySettings
+        // windowSize* (those are lazy KVC targets used by Fix Window swizzles).
         swap(&mainScreenWidth, &mainScreenHeight)
-        PlaySettings.shared.windowSizeWidth = mainScreenWidth
-        PlaySettings.shared.windowSizeHeight = mainScreenHeight
 
         guard !PlayScreen.shared.fullscreen else { return }
 
