@@ -9,6 +9,24 @@ import AppKit
 import CoreGraphics
 import Foundation
 
+func playCoverUpdateHostSizeConstraints(_ contentView: NSView, to size: CGSize) {
+    // UIKit's AppKit host pins its scene view to the previous content size.
+    // A frame change alone is undone by the next Auto Layout display cycle.
+    for view in contentView.subviews where view.frame == contentView.bounds {
+        let dimensions = view.constraints.filter {
+            $0.isActive && $0.firstItem === view && $0.secondItem == nil &&
+                $0.relation == .equal && $0.multiplier == 1 && $0.priority < .required
+        }
+        guard let width = dimensions.first(where: {
+            $0.firstAttribute == .width && abs($0.constant - view.bounds.width) < 1
+        }), let height = dimensions.first(where: {
+            $0.firstAttribute == .height && abs($0.constant - view.bounds.height) < 1
+        }) else { continue }
+        width.constant = size.width
+        height.constant = size.height
+    }
+}
+
 // Add a lightweight struct so we can decode only the flag we care about
 private struct AKAppSettingsData: Codable {
     var hideTitleBar: Bool?
@@ -101,11 +119,18 @@ class AKPlugin: NSObject, Plugin {
     }
 
     var mousePoint: CGPoint {
-        NSApplication.shared.windows.first?.mouseLocationOutsideOfEventStream ?? CGPoint()
+        guard let window = applicationWindow, let content = window.contentView else { return .zero }
+        let point = content.convert(window.mouseLocationOutsideOfEventStream, from: nil)
+        return CGPoint(x: point.x - content.bounds.minX,
+                       y: content.isFlipped ? content.bounds.maxY - point.y : point.y - content.bounds.minY)
     }
 
     var windowFrame: CGRect {
         applicationWindow?.frame ?? CGRect()
+    }
+
+    var windowContentSize: CGSize {
+        applicationWindow?.contentView?.bounds.size ?? .zero
     }
 
     var isMainScreenEqualToFirst: Bool {
@@ -316,15 +341,22 @@ class AKPlugin: NSObject, Plugin {
         if window.styleMask.contains(.fullScreen) {
             return
         }
-        window.contentAspectRatio = size
-        window.contentMinSize = size
-        window.contentMaxSize = size
-        window.setContentSize(size)
-        DispatchQueue.main.async { [weak window] in
-            window?.contentMinSize = .zero
-            window?.contentMaxSize = NSSize(width: CGFloat.greatestFiniteMagnitude,
-                                            height: CGFloat.greatestFiniteMagnitude)
+        guard size.width > 0, size.height > 0 else { return }
+        var target = window.frameRect(forContentRect: NSRect(origin: .zero, size: size))
+        let visible = window.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? window.frame
+        let titleHeight = target.height - size.height
+        let scale = min(1, visible.width / size.width, (visible.height - titleHeight) / size.height)
+        target.size = NSSize(width: size.width * scale, height: size.height * scale + titleHeight)
+        target.origin = NSPoint(x: window.frame.midX - target.width / 2,
+                                y: window.frame.maxY - target.height)
+        target.origin.x = max(visible.minX, min(target.minX, visible.maxX - target.width))
+        target.origin.y = max(visible.minY, min(target.minY, visible.maxY - target.height))
+        if let contentView = window.contentView {
+            playCoverUpdateHostSizeConstraints(contentView,
+                                               to: NSSize(width: size.width * scale, height: size.height * scale))
         }
+        // Keep the host's layout constraints and the explicit frame in agreement.
+        window.setFrame(target, display: true)
     }
 
     /// Convenience instance property that exposes the cached static preference.

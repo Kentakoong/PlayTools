@@ -6,47 +6,32 @@
 //
 
 import Foundation
+import CoreGraphics
 
 // Mouse events handler when cursor is free and keyboard mapping is on
 
 public class TouchscreenMouseEventAdapter: MouseEventAdapter {
 
     static public func cursorPos() -> CGPoint? {
-        // IMPROVE: this is expensive (maybe?)
-        var point = AKInterface.shared!.mousePoint
-        let rect = AKInterface.shared!.windowFrame
-        if rect.width < 1 || rect.height < 1 {
-            return nil
-        }
+        guard let host = AKInterface.shared, let window = screen.keyWindow else { return nil }
+        let point = host.mousePoint
+        let contentSize = host.windowContentSize
+        guard contentSize.width > 0, contentSize.height > 0,
+              point.x >= 0, point.y >= 0,
+              point.x <= contentSize.width, point.y <= contentSize.height else { return nil }
         if screen.resizable && !screen.fullscreen {
-            // Allow user to resize window by dragging edges
+            // Let AppKit handle dragging the window edges.
             let margin = CGFloat(10)
-            if point.x < margin || point.x > rect.width - margin ||
-                point.y < margin || point.y > rect.height - margin {
+            if point.x < margin || point.x > contentSize.width - margin ||
+                point.y < margin || point.y > contentSize.height - margin {
                 return nil
             }
         }
-        let viewRect: CGRect = screen.screenRect
-        let widthRate = viewRect.width / rect.width
-        var rate = viewRect.height / rect.height
-        if widthRate > rate {
-            // Keep aspect ratio
-            rate = widthRate
-        }
-        if screen.fullscreen {
-            // Vertically in center
-            point.y -= (rect.height - viewRect.height / rate)/2
-        }
-        point.y *= rate
-        point.y = viewRect.height - point.y
-        // For traffic light buttons when not fullscreen
-        if point.y < 0 {
-            return nil
-        }
-        // Horizontally in center
-        point.x -= (rect.width - viewRect.width / rate)/2
-        point.x *= rate
-        return point
+        // UIScreen can retain portrait bounds after the window rotates. Touches
+        // are delivered in UIWindow coordinates, scaled from the host content.
+        let bounds = window.bounds
+        return CGPoint(x: bounds.minX + point.x * bounds.width / contentSize.width,
+                       y: bounds.maxY - point.y * bounds.height / contentSize.height)
     }
 
     public func handleScrollWheel(deltaX: CGFloat, deltaY: CGFloat) -> Bool {

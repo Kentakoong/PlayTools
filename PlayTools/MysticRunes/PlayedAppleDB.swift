@@ -16,6 +16,13 @@ class PlayKeychainDB: NSObject {
     private var dbLock: DispatchSemaphore = .init(value: 1)
     private var dbVersion: Int = 1
 
+    static func matchLimit(_ attributes: NSDictionary) -> Int {
+        if let count = attributes[kSecMatchLimit] as? NSNumber {
+            return max(1, count.intValue)
+        }
+        return attributes[kSecMatchLimit] as? String == kSecMatchLimitAll as String ? Int.max : 1
+    }
+
     func query(_ attributes: NSDictionary) -> [NSMutableDictionary]? {
         guard let tableName = attributes[kSecClass] as? String,
               let primaryColumns = PlayedAppleDBConstants.primaries[tableName as CFString] else {
@@ -37,13 +44,16 @@ class PlayKeychainDB: NSObject {
         })
         let selectWhere = selectClauses.joined(separator: " AND ")
         guard selectWhere.count > 0 else { return nil }
-        let selectLimit = attributes[kSecMatchLimit] as? String == kSecMatchLimitOne as String ? 1 : Int.max
+        let selectLimit = Self.matchLimit(attributes)
 
         // Older PlayChain databases may contain duplicate logical items when an
         // omitted access group was stored as NULL. SQLite permits NULL values in
         // composite primary keys, so select the most recently written item just
         // like Keychain updates would expose the latest credential.
-        let selectQuery = "SELECT * FROM \(tableName) WHERE \(selectWhere) ORDER BY rowid DESC LIMIT \(selectLimit)"
+        let identityColumns = stablePrimaryColumns.map { "\($0)" }.joined(separator: ", ")
+        let latestItems = "SELECT MAX(rowid) FROM \(tableName) GROUP BY \(identityColumns)"
+        let selectQuery = "SELECT * FROM \(tableName) WHERE \(selectWhere) "
+            + "AND rowid IN (\(latestItems)) ORDER BY rowid DESC LIMIT \(selectLimit)"
         var stmt: OpaquePointer?
 
         var dictArr: [NSMutableDictionary] = []
@@ -260,7 +270,12 @@ class PlayKeychainDB: NSObject {
             .appendingPathComponent("\(bundleID).db")
         guard canOpenKeyCoverDatabase(keychainDB) else { return nil }
 
-        let alreadyCreated = FileManager.default.fileExists(atPath: keychainDB.path)
+        do {
+            try FileManager.default.createDirectory(at: keychainDB.deletingLastPathComponent(),
+                                                    withIntermediateDirectories: true)
+        } catch {
+            return nil
+        }
 
         guard sqlite3_open(keychainDB.path, &sqlite3DB) == SQLITE_OK,
               let sqlite3DB = sqlite3DB else {
@@ -268,7 +283,7 @@ class PlayKeychainDB: NSObject {
             return nil
         }
 
-        if !alreadyCreated || !structDB(sqlite3DB) {
+        if !structDB(sqlite3DB) {
             _ = disconnectFromDB(sqlite3DB)
             return nil
         }
