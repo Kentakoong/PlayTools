@@ -125,13 +125,24 @@ public class PlayKeychain: NSObject {
             return errSecItemNotFound
         }
 
-        if query[kSecMatchLimit as String] as? String ==  kSecMatchLimitAll as String {
-            result?.pointee = Unmanaged.passRetained(keychainDicts.map({
-                $0.removeObject(forKey: kSecValueData)
-                $0.removeObject(forKey: kSecValueRef)
-                $0.removeObject(forKey: kSecValuePersistentRef)
-                return $0
-            }) as CFTypeRef)
+        if PlayKeychainDB.matchLimit(query) > 1 {
+            let returnsData = query[kSecReturnData] as? Bool == true
+            let returnsAttributes = query[kSecReturnAttributes] as? Bool == true
+            if returnsData && !returnsAttributes {
+                let values = keychainDicts.compactMap { $0[kSecValueData] as? Data }
+                guard values.count == keychainDicts.count else { return errSecItemNotFound }
+                result?.pointee = Unmanaged.passRetained(values as CFTypeRef)
+            } else {
+                let items = keychainDicts.map { item in
+                    if !returnsData { item.removeObject(forKey: kSecValueData) }
+                    if query[kSecReturnRef] as? Bool != true { item.removeObject(forKey: kSecValueRef) }
+                    if query[kSecReturnPersistentRef] as? Bool != true {
+                        item.removeObject(forKey: kSecValuePersistentRef)
+                    }
+                    return item
+                }
+                result?.pointee = Unmanaged.passRetained(items as CFTypeRef)
+            }
             return errSecSuccess
         }
         // Check the `r_Attributes` key. If it is set to 1 in the query

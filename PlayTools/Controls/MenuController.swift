@@ -120,15 +120,17 @@ extension UIApplication {
 extension UIViewController {
     @objc
     func rotateView(_ sender: AnyObject, deviceOrientation: Int) {
+        guard presentedViewController == nil, !isBeingPresented, !isBeingDismissed else { return }
         RotateViewController.rotate(deviceOrientation: deviceOrientation)
         RotateViewController.orientationTraverser %= RotateViewController.orientationList.count
         OrientationSession.shared.applyManualRotation(index: deviceOrientation)
-        guard presentedViewController == nil, !isBeingPresented, !isBeingDismissed else { return }
         let viewController = RotateViewController(nibName: nil, bundle: nil)
         // Launch-time rendering can delay the presentation. A timer can dismiss
         // too early and leave the empty full-screen controller covering the game.
-        present(viewController, animated: true) {
-            viewController.dismiss(animated: true)
+        present(viewController, animated: false) {
+            viewController.dismiss(animated: false) {
+                OrientationSession.shared.completeRotation()
+            }
         }
     }
 }

@@ -44,6 +44,16 @@ func playCoverNeedsLaunchCompatibilityMigration(version: String) -> Bool {
     version.compare("3.1.0", options: .numeric) == .orderedAscending
 }
 
+// UIInterfaceOrientation raw values and mask bits, kept UIKit-independent so
+// the host and the transition regression test can use the same policy.
+func playCoverRequestedOrientation(sceneOrientation: Int, supportedOrientations: UInt) -> Int? {
+    let orientations = [1, 2, 3, 4]
+    let supported = orientations.filter { supportedOrientations & (1 << $0) != 0 }
+    if supported.contains(sceneOrientation) { return sceneOrientation }
+    if let requested = supported.first { return requested }
+    return orientations.contains(sceneOrientation) ? sceneOrientation : nil
+}
+
 @objc(Plugin)
 public protocol Plugin: NSObjectProtocol {
     init()
@@ -51,6 +61,7 @@ public protocol Plugin: NSObjectProtocol {
     var screenCount: Int { get }
     var mousePoint: CGPoint { get }
     var windowFrame: CGRect { get }
+    var windowContentSize: CGSize { get }
     var mainScreenFrame: CGRect { get }
     var isMainScreenEqualToFirst: Bool { get }
     var isFullscreen: Bool { get }

@@ -16,7 +16,7 @@ import UIKit
     private var portraitLayout = false
     private var hasAppliedTransition = false
     private var orientationTimer: Timer?
-    private var candidatePortraitLayout: Bool?
+    private var candidateOrientation: UIInterfaceOrientation?
     private var candidateObservationCount = 0
 
     @objc public var deviceOrientationRawValue: Int {
@@ -45,7 +45,7 @@ import UIKit
     }
 
     func applyManualRotation(index: Int) {
-        candidatePortraitLayout = nil
+        candidateOrientation = nil
         candidateObservationCount = 0
         apply(orientation: orientation(for: index))
     }
@@ -63,14 +63,16 @@ import UIKit
     private func apply(orientation: UIInterfaceOrientation) {
         let nextPortrait = orientation.isPortraitLike
         interfaceOrientation = orientation
+        hasAppliedTransition = true
         guard nextPortrait != portraitLayout else { return }
 
         updateVirtualScreenSize(portrait: nextPortrait)
         portraitLayout = nextPortrait
-        hasAppliedTransition = true
+    }
 
+    func completeRotation() {
         guard !PlayScreen.shared.fullscreen else { return }
-        requestSceneResize(portrait: nextPortrait)
+        requestSceneResize(portrait: portraitLayout)
     }
 
     private func updateVirtualScreenSize(portrait: Bool) {
@@ -83,67 +85,48 @@ import UIKit
     }
 
     private func requestSceneResize(portrait: Bool) {
-        guard let scene = PlayScreen.shared.windowScene,
-              let interface = AKInterface.shared,
-              let restrictions = scene.sizeRestrictions
+        guard PlayScreen.shared.windowScene != nil,
+              let interface = AKInterface.shared
         else { return }
 
-        let currentSize = interface.windowFrame.size
+        let currentSize = interface.windowContentSize
         let shortSide = min(currentSize.width, currentSize.height)
         let longSide = max(currentSize.width, currentSize.height)
         let targetSize = portrait
             ? CGSize(width: shortSide, height: longSide)
             : CGSize(width: longSide, height: shortSide)
-        restrictions.minimumSize = targetSize
-        restrictions.maximumSize = targetSize
-
-        // Let UIKit apply the constrained scene geometry before returning the
-        // window to its normal user-resizable range.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak scene] in
-            scene?.sizeRestrictions?.minimumSize = CGSize(width: 0, height: 0)
-            scene?.sizeRestrictions?.maximumSize = CGSize(width: CGFloat.greatestFiniteMagnitude,
-                                                           height: CGFloat.greatestFiniteMagnitude)
-        }
-
-        // Unmodified iOS-on-Mac apps can ignore sizeRestrictions. Wait until
-        // UIKit's orientation/layout transaction is complete before asking
-        // AppKit to update only the content size.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) {
-            AKInterface.shared?.setWindowContentSize(targetSize)
-        }
+        guard shortSide > 0 else { return }
+        interface.setWindowContentSize(targetSize)
     }
 
     private func observeGameOrientation() {
         guard let window = PlayScreen.shared.window else { return }
-        let sceneOrientation = window.windowScene?.interfaceOrientation
-        let mask = window.rootViewController?.supportedInterfaceOrientations ?? []
-        let supportsPortrait = mask.contains(.portrait) || mask.contains(.portraitUpsideDown)
-        let supportsLandscape = mask.contains(.landscapeLeft) || mask.contains(.landscapeRight)
-        let requestedPortraitLayout: Bool?
-        if let sceneOrientation, sceneOrientation.isPortraitLike || sceneOrientation.isLandscape {
-            requestedPortraitLayout = sceneOrientation.isPortraitLike
-        } else if supportsPortrait != supportsLandscape {
-            requestedPortraitLayout = supportsPortrait
-        } else {
-            requestedPortraitLayout = nil
-        }
-        guard let requestedPortraitLayout else {
-            candidatePortraitLayout = nil
+        guard let root = window.rootViewController,
+              root.presentedViewController == nil,
+              !root.isBeingPresented, !root.isBeingDismissed else { return }
+        let sceneOrientation = window.windowScene?.interfaceOrientation ?? .unknown
+        let mask = root.supportedInterfaceOrientations
+        guard let rawOrientation = playCoverRequestedOrientation(
+            sceneOrientation: sceneOrientation.rawValue, supportedOrientations: mask.rawValue),
+              let requested = UIInterfaceOrientation(rawValue: rawOrientation) else {
+            candidateOrientation = nil
             candidateObservationCount = 0
             return
         }
 
-        if candidatePortraitLayout == requestedPortraitLayout {
+        if candidateOrientation == requested {
             candidateObservationCount += 1
         } else {
-            candidatePortraitLayout = requestedPortraitLayout
+            candidateOrientation = requested
             candidateObservationCount = 1
         }
-        guard candidateObservationCount >= 2, requestedPortraitLayout != portraitLayout else { return }
+        guard candidateObservationCount >= 2, requested != interfaceOrientation else { return }
 
         candidateObservationCount = 0
-        NSLog("[PlayTools] Game requested %@ layout", requestedPortraitLayout ? "portrait" : "landscape")
-        apply(orientation: requestedPortraitLayout ? .portrait : .landscapeLeft)
+        let orientations: [UIInterfaceOrientation] = [.landscapeLeft, .portrait, .landscapeRight, .portraitUpsideDown]
+        guard let index = orientations.firstIndex(of: requested) else { return }
+        // Updating virtual bounds alone leaves Unity waiting for UIKit.
+        root.rotateView(self, deviceOrientation: index)
     }
 
     private func orientation(for index: Int) -> UIInterfaceOrientation {
